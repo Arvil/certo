@@ -1,10 +1,13 @@
-use std::{net::TcpStream, io::{Write}};
-use rustls::{ClientConnection};
+use rustls::ClientConnection;
+use std::{io::Write, net::TcpStream};
 
-use crate::error::Error;
+use crate::error::{Error, Result};
 
-pub fn get_cert_chain<'a>(conn: &'a mut ClientConnection, hostname: &str) -> Result<&'a[rustls::Certificate], Error>  {
-    let mut sock = TcpStream::connect(format!("{}:443", hostname)).map_err(|_| Error::ConnectionError)?;
+pub fn get_cert_chain<'a>(
+    conn: &'a mut ClientConnection,
+    hostname: &str,
+) -> Result<&'a [rustls::Certificate]> {
+    let mut sock = TcpStream::connect((hostname, 443)).map_err(|_| Error::ConnectionError)?;
     let mut tls = rustls::Stream::new(conn, &mut sock);
 
     match tls.write_all(
@@ -16,6 +19,4 @@ pub fn get_cert_chain<'a>(conn: &'a mut ClientConnection, hostname: &str) -> Res
         Ok(_) => conn.peer_certificates().ok_or(Error::NoCertificateError),
         Err(e) => Err(Error::InvalidCertificateError{why:format!("{:#}", e)}),
     }
-
-    
 }

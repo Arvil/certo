@@ -1,38 +1,47 @@
 use std::sync::Arc;
-use time::OffsetDateTime;
 
-use error::Error;
-use x509_parser::prelude::{X509Certificate, FromDer};
+use clap::Parser;
+use env_logger;
+use error::{Error, Result};
+use log::info;
 
-mod config;
+use crate::cert_test::CertTest;
+
 mod cert;
+mod cert_test;
+mod config;
 mod error;
 
-fn main() -> Result<(), Error> {
+/// Certo - TLS Certificate Checker
+#[derive(Parser, Debug)]
+#[command(author, version, about, long_about = None)]
+struct Args {
+    /// Warn about near expiration if within this number of days of the cert's notAfter
+    #[arg(short = 'd', default_value = "5")]
+    days_to_expiration: i64,
+
+    /// [List of] Hosts to check the certificates of
+    #[arg(required = true)]
+    hosts: Vec<String>,
+}
+
+fn main() -> Result<()> {
+    let args = Args::parse();
+    env_logger::init();
+
+    info!("Config: {:?}", args);
+
     let root_store = config::load_root_certs();
     let config = Arc::new(config::safe_clientconfig(root_store));
-    let hostname = "google.com";
 
-    let server_name = hostname.try_into().unwrap();
-    let mut conn = rustls::ClientConnection::new(config, server_name).unwrap();
+    let mut tests = args
+        .hosts
+        .iter()
+        .map(|hostname| CertTest::new(hostname, args.days_to_expiration, config.clone()));
 
-    let chain = cert::get_cert_chain(&mut conn, hostname)?;
-    let leaf_der = &chain.first().unwrap().0[..];
-
-    let certificate = {
-        if let Ok((_, leaf_cert)) = X509Certificate::from_der(&leaf_der) {
-            Some(leaf_cert)
-        } else {
-            None
-        }
-    }.unwrap();
-
-    println!("{:#}", &certificate.tbs_certificate.subject);
-    println!("{:#}", &certificate.tbs_certificate.validity.not_after);
-
-    let not_after = &certificate.tbs_certificate.validity().not_after.to_datetime();
-    let now = OffsetDateTime::now_utc();
-    println!("{:#}", (*not_after - now).whole_days());
-
-    Ok(())
+    if tests.all(|t| t.result.is_ok()) {
+        Ok(())
+    } else {
+        Err(Error::CertoTestFailure(1))
+    }
 }
