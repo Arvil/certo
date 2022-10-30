@@ -7,16 +7,17 @@ pub fn get_cert_chain<'a>(
     conn: &'a mut ClientConnection,
     hostname: &str,
 ) -> Result<&'a [rustls::Certificate]> {
-    let mut sock = TcpStream::connect((hostname, 443)).map_err(|_| Error::ConnectionError)?;
+    let mut sock = TcpStream::connect((hostname, 443)).map_err(|_| Error::ConnectionFailure)?;
     let mut tls = rustls::Stream::new(conn, &mut sock);
 
     match tls.write_all(
+        // TODO support non-http1.1
         format!(
             "HEAD / HTTP/1.1\r\nHostname: {}\r\nConnection: close\r\nAccept-Encoding: identity\r\n\r\n",
             hostname
         ).as_bytes()
     ) {
-        Ok(_) => conn.peer_certificates().ok_or(Error::NoCertificateError),
-        Err(e) => Err(Error::InvalidCertificateError{why:format!("{:#}", e)}),
+        Ok(_) => conn.peer_certificates().ok_or(Error::NoCertificate),
+        Err(e) => Err(Error::InvalidCertificate{why:format!("{:#}", e)}),
     }
 }
