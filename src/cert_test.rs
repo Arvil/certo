@@ -1,7 +1,7 @@
-use std::{sync::Arc};
+use std::sync::Arc;
 
 use rustls::{ClientConfig, ServerName};
-use serde::{Serialize, ser::SerializeStruct};
+use serde::{ser::SerializeStruct, Serialize};
 use time::OffsetDateTime;
 use x509_parser::prelude::{FromDer, X509Certificate};
 
@@ -19,14 +19,15 @@ pub struct CertTest<'a> {
 impl<'a> Serialize for CertTest<'a> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
-        S: serde::Serializer {
+        S: serde::Serializer,
+    {
         let mut state = serializer.serialize_struct("CertTest", 3)?;
         state.serialize_field("hostname", self.hostname)?;
-        
+
         let result_str = match &self.result {
             Ok(days_to_expiration) => {
                 format!("{} days remaining", days_to_expiration.0)
-            },
+            }
             Err(err) => err.to_string(),
         };
         state.serialize_field("success", &self.result.is_ok())?;

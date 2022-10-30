@@ -8,8 +8,8 @@ use crate::cert_test::CertTest;
 
 mod cert;
 mod cert_test;
-mod ssl_config;
 mod error;
+mod ssl_config;
 
 /// Certo - TLS Certificate Checker
 #[derive(Parser, Debug)]
