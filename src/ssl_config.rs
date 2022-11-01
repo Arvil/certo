@@ -1,5 +1,7 @@
-use log::{info, warn};
-use rustls::{ClientConfig, OwnedTrustAnchor, RootCertStore};
+use std::{path::PathBuf, fs};
+
+use log::{info, warn, error};
+use rustls::{ClientConfig, OwnedTrustAnchor, RootCertStore, Certificate};
 
 fn load_webpki_roots(store: &mut RootCertStore) {
     store.add_server_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.0.iter().map(|ta| {
@@ -11,23 +13,34 @@ fn load_webpki_roots(store: &mut RootCertStore) {
     }))
 }
 
-pub fn load_root_certs() -> RootCertStore {
-    let mut root_store = rustls::RootCertStore::empty();
-
+pub fn load_root_certs(store: &mut RootCertStore) {
     match rustls_native_certs::load_native_certs() {
         Ok(certs) => {
             for cert in certs {
-                root_store.add(&rustls::Certificate(cert.0)).unwrap();
+                store.add(&rustls::Certificate(cert.0)).unwrap();
             }
             info!("Loaded native root certificate store.");
         }
         Err(_) => {
             // Fallback to webpki_roots
             warn!("Failed to load native root certificate store, falling back to WebPKI...");
-            load_webpki_roots(&mut root_store);
+            load_webpki_roots(store);
         }
     }
-    root_store
+}
+
+pub fn load_certs(store: &mut RootCertStore, certs: Vec<PathBuf>) {
+    
+    for cert in certs.iter() {
+        if let Ok(der) = fs::read(cert) {
+            match store.add(&Certificate(der)) {
+                Ok(_) => info!("Loaded {}", cert.to_string_lossy()),
+                Err(e) => error!("Failed to import {}: {}", cert.to_string_lossy(), e.to_string()),
+            }
+        } else {
+            error!("Failed to read {}", cert.to_string_lossy());
+        }
+    }
 }
 
 pub fn safe_clientconfig(root_store: RootCertStore) -> ClientConfig {
