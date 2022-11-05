@@ -34,7 +34,7 @@ struct Args {
     force_system_root_store: bool,
 
     /// Output results in json format for further processing
-    #[arg(short = 'j', default_value = "false")]
+    #[arg(short = 'j', long, default_value = "false")]
     json: bool,
 
     /// [List of] Hosts to check the certificates of
