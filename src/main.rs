@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use clap::Parser;
 use error::{Error, Result};
-use log::{info, error};
+use log::{error, info};
 
 use crate::cert_test::CertTest;
 
@@ -12,7 +12,7 @@ mod error;
 mod ssl_config;
 
 /// Certo - TLS Certificate impending expiration checker
-/// 
+///
 /// By default, uses the Operating System's Root Certificate Store however use
 /// of custom certificates overrides this behaviour.
 #[derive(Parser, Debug)]
@@ -23,14 +23,14 @@ struct Args {
     #[arg(short = 'd', default_value = "5")]
     days_to_expiration: i64,
 
-    /// Custom root certificates to use for verification. Expected to be 
+    /// Custom root certificates to use for verification. Expected to be
     /// DER-encoded root certificates are expected to be found within.
     #[arg(short = 'c')]
     custom_root_certs: Vec<std::path::PathBuf>,
 
-    /// Force use of the system-installed root certificate store if default 
+    /// Force use of the system-installed root certificate store if default
     /// behaviour is overriden by use of custom root certificates
-    #[arg(short = 'F', long, default_value="false")]
+    #[arg(short = 'F', long, default_value = "false")]
     force_system_root_store: bool,
 
     /// Output results in json format for further processing
@@ -42,7 +42,6 @@ struct Args {
     hosts: Vec<String>,
 }
 
-/// TODO add tests
 fn main() -> Result<()> {
     env_logger::init();
     let args = Args::parse();
@@ -70,10 +69,10 @@ fn main() -> Result<()> {
     if args.json {
         println!("{}", serde_json::to_string_pretty(&tests).unwrap());
     } else {
-        for t in tests.iter()
-            .filter(|t| t.result.is_err()) 
-        {
-            error!("[ FAIL ] {}: {}", t.hostname, t.result.as_ref().unwrap_err());
+        for t in tests.iter().for_each(|t| match t.result {
+            Ok(remaining_days) => info!(
+                "[ PASS ] {}: {}", t.hostname, remaining_days),
+            Err(e) => error!("[ FAIL ] {}: {}", t.hostname, e),
         }
     }
 
