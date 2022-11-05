@@ -23,10 +23,10 @@ struct Args {
     #[arg(short = 'd', default_value = "5")]
     days_to_expiration: i64,
 
-    /// Custom root certificates to use for verification. Expected to be
-    /// DER-encoded root certificates are expected to be found within.
+    /// Custom root PEM certificates to use for verification.
+    /// Can be either a certificate, or a collection of concatenated PEM certs.
     #[arg(short = 'c')]
-    custom_root_certs: Vec<std::path::PathBuf>,
+    custom_ca_certs: Vec<std::path::PathBuf>,
 
     /// Force use of the system-installed root certificate store if default
     /// behaviour is overriden by use of custom root certificates
@@ -46,16 +46,17 @@ fn main() -> Result<()> {
     env_logger::init();
     let args = Args::parse();
 
-    info!("Config: {:?}", args);
+    info!("Config: {:#?}", args);
 
     let mut root_store = rustls::RootCertStore::empty();
-    if !args.custom_root_certs.is_empty() {
-        ssl_config::load_certs(&mut root_store, args.custom_root_certs);
+
+    if args.custom_ca_certs.is_empty() {
+        ssl_config::load_root_certs(&mut root_store);
+    } else {
+        ssl_config::load_pem_certs(&mut root_store, args.custom_ca_certs);
         if args.force_system_root_store {
             ssl_config::load_root_certs(&mut root_store);
         }
-    } else {
-        ssl_config::load_root_certs(&mut root_store);
     }
 
     let config = Arc::new(ssl_config::safe_clientconfig(root_store));
@@ -69,11 +70,13 @@ fn main() -> Result<()> {
     if args.json {
         println!("{}", serde_json::to_string_pretty(&tests).unwrap());
     } else {
-        for t in tests.iter().for_each(|t| match t.result {
-            Ok(remaining_days) => info!(
-                "[ PASS ] {}: {}", t.hostname, remaining_days),
-            Err(e) => error!("[ FAIL ] {}: {}", t.hostname, e),
-        }
+        tests.iter().for_each(
+            |t| match &t.result {
+                Ok(remaining_days) => info!(
+                    "[ PASS ] {}: {} days remaining", t.hostname, remaining_days),
+                Err(e) => error!("[ FAIL ] {}: {}", t.hostname, e),
+            }
+        )
     }
 
     if tests.iter().all(|t| t.result.is_ok()) {

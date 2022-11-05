@@ -1,7 +1,11 @@
-use std::{path::PathBuf, fs};
+use std::{
+    fs::File,
+    io::BufReader,
+    path::PathBuf,
+};
 
-use log::{info, warn, error};
-use rustls::{ClientConfig, OwnedTrustAnchor, RootCertStore, Certificate};
+use log::{error, info, warn};
+use rustls::{ClientConfig, OwnedTrustAnchor, RootCertStore};
 
 fn load_webpki_roots(store: &mut RootCertStore) {
     store.add_server_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.0.iter().map(|ta| {
@@ -29,16 +33,25 @@ pub fn load_root_certs(store: &mut RootCertStore) {
     }
 }
 
-pub fn load_certs(store: &mut RootCertStore, certs: Vec<PathBuf>) {
-    
-    for cert in certs.iter() {
-        if let Ok(der) = fs::read(cert) {
-            match store.add(&Certificate(der)) {
-                Ok(_) => info!("Loaded {}", cert.to_string_lossy()),
-                Err(e) => error!("Failed to import {}: {}", cert.to_string_lossy(), e.to_string()),
+pub fn load_pem_certs(store: &mut RootCertStore, certs: Vec<PathBuf>) {
+    for ca_cert in certs.iter() {
+        if let Ok(f) = File::open(ca_cert) {
+            let mut f = BufReader::new(f);
+
+            match rustls_pemfile::certs(&mut f) {
+                Ok(contents) => {
+                    let (added, ignored) = store.add_parsable_certificates(&contents);
+                    info!(
+                        "Added {} and ignored {} certificates from {}",
+                        added,
+                        ignored,
+                        ca_cert.to_string_lossy()
+                    );
+                }
+                Err(_) => error!("Failed to parse {}", ca_cert.to_string_lossy()),
             }
         } else {
-            error!("Failed to read {}", cert.to_string_lossy());
+            error!("Failed to read {}", ca_cert.to_string_lossy());
         }
     }
 }

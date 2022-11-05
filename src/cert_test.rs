@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{sync::Arc, fmt::Display};
 
 use rustls::{ClientConfig, ServerName};
 use serde::{ser::SerializeStruct, Serialize};
@@ -9,6 +9,12 @@ use crate::{cert, error::Error};
 
 #[derive(Debug, Eq, PartialEq, PartialOrd, Ord)]
 pub struct DaysToExpiration(i64);
+
+impl Display for DaysToExpiration {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
+}
 
 #[derive(Debug)]
 pub struct CertTest<'a> {
