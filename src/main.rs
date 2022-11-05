@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use clap::Parser;
 use error::{Error, Result};
-use log::info;
+use log::{info, error};
 
 use crate::cert_test::CertTest;
 
@@ -32,6 +32,10 @@ struct Args {
     /// behaviour is overriden by use of custom root certificates
     #[arg(short = 'F', long, default_value="false")]
     force_system_root_store: bool,
+
+    /// Output results in json format for further processing
+    #[arg(short = 'j', default_value = "false")]
+    json: bool,
 
     /// [List of] Hosts to check the certificates of
     #[arg(required = true)]
@@ -63,7 +67,15 @@ fn main() -> Result<()> {
         .map(|hostname| CertTest::new(hostname, args.days_to_expiration, config.clone()))
         .collect();
 
-    println!("{}", serde_json::to_string_pretty(&tests).unwrap());
+    if args.json {
+        println!("{}", serde_json::to_string_pretty(&tests).unwrap());
+    } else {
+        for t in tests.iter()
+            .filter(|t| t.result.is_err()) 
+        {
+            error!("[ FAIL ] {}: {}", t.hostname, t.result.as_ref().unwrap_err());
+        }
+    }
 
     if tests.iter().all(|t| t.result.is_ok()) {
         Ok(())
