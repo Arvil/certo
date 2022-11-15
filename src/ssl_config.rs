@@ -1,8 +1,4 @@
-use std::{
-    fs::File,
-    io::BufReader,
-    path::PathBuf,
-};
+use std::{fs::File, io::BufReader, path::PathBuf};
 
 use log::{error, info, warn};
 use rustls::{ClientConfig, OwnedTrustAnchor, RootCertStore};

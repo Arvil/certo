@@ -3,6 +3,7 @@ use std::sync::Arc;
 use clap::Parser;
 use error::{Error, Result};
 use log::{error, info};
+use rayon::prelude::*;
 
 use crate::cert_test::CertTest;
 
@@ -63,20 +64,19 @@ fn main() -> Result<()> {
 
     let tests: Vec<_> = args
         .hosts
-        .iter()
+        .par_iter()
         .map(|hostname| CertTest::new(hostname, args.days_to_expiration, config.clone()))
         .collect();
 
     if args.json {
         println!("{}", serde_json::to_string_pretty(&tests).unwrap());
     } else {
-        tests.iter().for_each(
-            |t| match &t.result {
-                Ok(remaining_days) => info!(
-                    "[ PASS ] {}: {} days remaining", t.hostname, remaining_days),
-                Err(e) => error!("[ FAIL ] {}: {}", t.hostname, e),
+        tests.iter().for_each(|t| match &t.result {
+            Ok(remaining_days) => {
+                info!("[ PASS ] {}: {} days remaining", t.hostname, remaining_days)
             }
-        )
+            Err(e) => error!("[ FAIL ] {}: {}", t.hostname, e),
+        })
     }
 
     if tests.iter().all(|t| t.result.is_ok()) {

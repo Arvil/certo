@@ -1,4 +1,4 @@
-use std::{sync::Arc, fmt::Display};
+use std::{fmt::Display, sync::Arc};
 
 use rustls::{ClientConfig, ServerName};
 use serde::{ser::SerializeStruct, Serialize};
