@@ -5,10 +5,11 @@ use error::{Error, Result};
 use log::{error, info};
 use rayon::prelude::*;
 
-use crate::cert_test::CertTest;
+use crate::{cert_test::CertTest, client_auth::ClientAuthenticationCredentials};
 
 mod cert;
 mod cert_test;
+pub mod client_auth;
 mod error;
 mod ssl_config;
 
@@ -20,7 +21,7 @@ mod ssl_config;
 #[command(author, version, about, long_about = None)]
 struct Args {
     /// Warn about near expiration if within this number of days of the cert's
-    /// notAfter
+    /// notAfter.
     #[arg(short = 'd', default_value = "5")]
     days_to_expiration: i64,
 
@@ -30,15 +31,23 @@ struct Args {
     custom_ca_certs: Vec<std::path::PathBuf>,
 
     /// Force use of the system-installed root certificate store if default
-    /// behaviour is overriden by use of custom root certificates
+    /// behaviour is overriden by use of custom root certificates.
     #[arg(short = 'F', long, default_value = "false")]
     force_system_root_store: bool,
 
-    /// Output results in json format for further processing
+    /// Client PEM certificate chain for client authentication.
+    #[arg(long)]
+    client_cert_chain: Vec<std::path::PathBuf>,
+
+    /// Client keyfile, in PKCS8 format.
+    #[arg(long)]
+    client_keyfile: Option<std::path::PathBuf>,
+
+    /// Output results in json format for further processing.
     #[arg(short = 'j', long, default_value = "false")]
     json: bool,
 
-    /// [List of] Hosts to check the certificates of
+    /// [List of] Hosts to check the certificates of.
     #[arg(required = true)]
     hosts: Vec<String>,
 }
@@ -60,7 +69,16 @@ fn main() -> Result<()> {
         }
     }
 
-    let config = Arc::new(ssl_config::safe_clientconfig(root_store));
+    let client_auth = if args.client_keyfile.is_some() && !args.client_cert_chain.is_empty() {
+        Some(ClientAuthenticationCredentials::new(
+            &args.client_cert_chain,
+            &args.client_keyfile.unwrap(),
+        )?)
+    } else {
+        None
+    };
+
+    let config = Arc::new(ssl_config::safe_clientconfig(root_store, client_auth)?);
 
     let tests: Vec<_> = args
         .hosts

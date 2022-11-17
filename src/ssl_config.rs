@@ -3,6 +3,8 @@ use std::{fs::File, io::BufReader, path::PathBuf};
 use log::{error, info, warn};
 use rustls::{ClientConfig, OwnedTrustAnchor, RootCertStore};
 
+use crate::client_auth::ClientAuthenticationCredentials;
+
 fn load_webpki_roots(store: &mut RootCertStore) {
     store.add_server_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.0.iter().map(|ta| {
         OwnedTrustAnchor::from_subject_spki_name_constraints(
@@ -52,12 +54,21 @@ pub fn load_pem_certs(store: &mut RootCertStore, certs: Vec<PathBuf>) {
     }
 }
 
-pub fn safe_clientconfig(root_store: RootCertStore) -> ClientConfig {
-    rustls::ClientConfig::builder()
+pub fn safe_clientconfig(
+    root_store: RootCertStore,
+    client_auth: Option<ClientAuthenticationCredentials>,
+) -> crate::Result<ClientConfig> {
+    let wants_client_auth = rustls::ClientConfig::builder()
         .with_safe_default_cipher_suites()
         .with_safe_default_kx_groups()
         .with_safe_default_protocol_versions()
         .unwrap()
-        .with_root_certificates(root_store)
-        .with_no_client_auth()
+        .with_root_certificates(root_store);
+
+    match client_auth {
+        Some(creds) => wants_client_auth
+            .with_single_cert(creds.cert_chain, creds.key_der)
+            .map_err(|e| crate::Error::InvalidCredentials { why: e.to_string() }),
+        None => Ok(wants_client_auth.with_no_client_auth()),
+    }
 }

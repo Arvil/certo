@@ -7,6 +7,12 @@ pub enum Error {
     #[error("Invalid Certificate: {why}.")]
     InvalidCertificate { why: String },
 
+    #[error("Invalid Private Key: {why}.")]
+    InvalidPrivateKey { why: String },
+
+    #[error("Invalid Credentials: {why}.")]
+    InvalidCredentials { why: String },
+
     #[error("Certificate about to expire in {days_to_expiration} days < {max_days_to_expiration}")]
     AlmostExpiredCertificate {
         days_to_expiration: i64,
