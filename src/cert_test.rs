@@ -7,7 +7,7 @@ use x509_parser::prelude::{FromDer, X509Certificate};
 
 use crate::{cert, error::Error};
 
-#[derive(Debug, Eq, PartialEq, PartialOrd, Ord)]
+#[derive(Debug, Eq, PartialEq, PartialOrd, Ord, Serialize)]
 pub struct DaysToExpiration(i64);
 
 impl Display for DaysToExpiration {
@@ -30,14 +30,16 @@ impl<'a> Serialize for CertTest<'a> {
         let mut state = serializer.serialize_struct("CertTest", 3)?;
         state.serialize_field("hostname", self.hostname)?;
 
-        let result_str = match &self.result {
-            Ok(days_to_expiration) => {
-                format!("{} days remaining", days_to_expiration.0)
-            }
-            Err(err) => err.to_string(),
+        let (maybe_remaining_days, result_str) = match &self.result {
+            Ok(days_to_expiration) => (
+                Some(days_to_expiration),
+                format!("{} days remaining", days_to_expiration.0),
+            ),
+            Err(err) => (None, err.to_string()),
         };
         state.serialize_field("success", &self.result.is_ok())?;
         state.serialize_field("message", &result_str)?;
+        state.serialize_field("remainingDays", &maybe_remaining_days)?;
         state.end()
     }
 }
