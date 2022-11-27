@@ -2,70 +2,33 @@ use std::sync::Arc;
 
 use clap::Parser;
 use error::{Error, Result};
-use log::{error, info};
+use log::{debug, error, info};
 use rayon::prelude::*;
 
-use crate::{cert_test::CertTest, client_auth::ClientAuthenticationCredentials};
+use crate::{cert_test::CertTest, cli::Args, client_auth::ClientAuthenticationCredentials};
 
 mod cert;
 mod cert_test;
-pub mod client_auth;
+mod cli;
+mod client_auth;
 mod error;
 mod ssl_config;
-
-/// Certo - TLS Certificate impending expiration checker
-///
-/// By default, uses the Operating System's Root Certificate Store however use
-/// of custom certificates overrides this behaviour.
-#[derive(Parser, Debug)]
-#[command(author, version, about, long_about = None)]
-struct Args {
-    /// Warn about near expiration if within this number of days of the cert's
-    /// notAfter.
-    #[arg(short = 'd', default_value = "5")]
-    days_to_expiration: i64,
-
-    /// Custom root PEM certificates to use for verification.
-    /// Can be either a certificate, or a collection of concatenated PEM certs.
-    #[arg(short = 'c')]
-    custom_ca_certs: Vec<std::path::PathBuf>,
-
-    /// Force use of the system-installed root certificate store if default
-    /// behaviour is overriden by use of custom root certificates.
-    #[arg(short = 'F', long, default_value = "false")]
-    force_system_root_store: bool,
-
-    /// Client PEM certificate chain for client authentication.
-    #[arg(long)]
-    client_cert_chain: Vec<std::path::PathBuf>,
-
-    /// Client keyfile, in PKCS8 format.
-    #[arg(long)]
-    client_keyfile: Option<std::path::PathBuf>,
-
-    /// Output results in json format for further processing.
-    #[arg(short = 'j', long, default_value = "false")]
-    json: bool,
-
-    /// [List of] Hosts to check the certificates of.
-    #[arg(required = true)]
-    hosts: Vec<String>,
-}
+mod types;
 
 fn main() -> Result<()> {
     env_logger::init();
     let args = Args::parse();
 
-    info!("Config: {:#?}", args);
+    debug!("Config: {:#?}", args);
 
     let mut root_store = rustls::RootCertStore::empty();
 
     if args.custom_ca_certs.is_empty() {
-        ssl_config::load_root_certs(&mut root_store);
+        ssl_config::load_native_certs(&mut root_store)?;
     } else {
         ssl_config::load_pem_certs(&mut root_store, args.custom_ca_certs);
         if args.force_system_root_store {
-            ssl_config::load_root_certs(&mut root_store);
+            ssl_config::load_native_certs(&mut root_store)?;
         }
     }
 

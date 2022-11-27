@@ -1,10 +1,11 @@
 use std::{fs::File, io::BufReader, path::PathBuf};
 
-use log::{error, info, warn};
+use log::{error, info};
 use rustls::{ClientConfig, OwnedTrustAnchor, RootCertStore};
 
 use crate::client_auth::ClientAuthenticationCredentials;
 
+#[allow(dead_code)] // will be used in later versions
 fn load_webpki_roots(store: &mut RootCertStore) {
     store.add_server_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.0.iter().map(|ta| {
         OwnedTrustAnchor::from_subject_spki_name_constraints(
@@ -15,20 +16,22 @@ fn load_webpki_roots(store: &mut RootCertStore) {
     }))
 }
 
-pub fn load_root_certs(store: &mut RootCertStore) {
-    match rustls_native_certs::load_native_certs() {
-        Ok(certs) => {
-            for cert in certs {
-                store.add(&rustls::Certificate(cert.0)).unwrap();
-            }
-            info!("Loaded native root certificate store.");
-        }
-        Err(_) => {
-            // Fallback to webpki_roots
-            warn!("Failed to load native root certificate store, falling back to WebPKI...");
-            load_webpki_roots(store);
+pub fn load_native_certs(store: &mut RootCertStore) -> crate::Result<()> {
+    let native_certs = rustls_native_certs::load_native_certs()
+        .map_err(|e| crate::Error::TLSInitializationFailure { why: e.to_string() })?;
+
+    for cert in native_certs {
+        if let Err(crate::Error::InvalidCertificate { why }) = store
+            .add(&rustls::Certificate(cert.0))
+            .map_err(|e| crate::Error::InvalidCertificate { why: e.to_string() })
+        {
+            error!(
+                "Failed to add certificate from native certificate store: {}",
+                why
+            );
         }
     }
+    Ok(())
 }
 
 pub fn load_pem_certs(store: &mut RootCertStore, certs: Vec<PathBuf>) {
@@ -62,7 +65,7 @@ pub fn safe_clientconfig(
         .with_safe_default_cipher_suites()
         .with_safe_default_kx_groups()
         .with_safe_default_protocol_versions()
-        .unwrap()
+        .map_err(|e| crate::Error::TLSInitializationFailure { why: e.to_string() })?
         .with_root_certificates(root_store);
 
     match client_auth {

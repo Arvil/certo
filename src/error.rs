@@ -4,6 +4,9 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Error, Debug)]
 pub enum Error {
+    #[error("Falied to initialise TLS context: {why}")]
+    TLSInitializationFailure { why: String },
+
     #[error("Invalid Certificate: {why}.")]
     InvalidCertificate { why: String },
 

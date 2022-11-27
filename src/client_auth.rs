@@ -15,6 +15,7 @@ impl ClientAuthenticationCredentials {
         cert_chain_paths: &[PathBuf],
         key_path: &PathBuf,
     ) -> crate::Result<ClientAuthenticationCredentials> {
+        // Load client certificate chain
         let mut certs: Vec<Certificate> = Vec::new();
         for cert_path in cert_chain_paths {
             if let Ok(cert_file) = File::open(cert_path) {
@@ -27,6 +28,7 @@ impl ClientAuthenticationCredentials {
             }
         }
 
+        // Load client key
         let key_path_s = key_path.to_string_lossy().to_string();
         let key_der: rustls::PrivateKey = {
             if let Ok(key_file) = File::open(key_path) {

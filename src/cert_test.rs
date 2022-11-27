@@ -1,20 +1,11 @@
-use std::{fmt::Display, sync::Arc};
+use std::sync::Arc;
 
 use rustls::{ClientConfig, ServerName};
 use serde::{ser::SerializeStruct, Serialize};
 use time::OffsetDateTime;
 use x509_parser::prelude::{FromDer, X509Certificate};
 
-use crate::{cert, error::Error};
-
-#[derive(Debug, Eq, PartialEq, PartialOrd, Ord, Serialize)]
-pub struct DaysToExpiration(i64);
-
-impl Display for DaysToExpiration {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.0.fmt(f)
-    }
-}
+use crate::{cert, error::Error, types::DaysToExpiration};
 
 #[derive(Debug)]
 pub struct CertTest<'a> {
@@ -33,7 +24,7 @@ impl<'a> Serialize for CertTest<'a> {
         let (maybe_remaining_days, result_str) = match &self.result {
             Ok(days_to_expiration) => (
                 Some(days_to_expiration),
-                format!("{} days remaining", days_to_expiration.0),
+                format!("{} days remaining", days_to_expiration),
             ),
             Err(err) => (None, err.to_string()),
         };
@@ -54,6 +45,10 @@ impl<'a> CertTest<'a> {
         let mut conn = rustls::ClientConnection::new(ssl_config, server_name).unwrap();
 
         match cert::get_cert_chain(&mut conn, hostname) {
+            Err(e) => CertTest {
+                hostname,
+                result: Err(e),
+            },
             Ok(chain) => {
                 let leaf_der = &chain.first().unwrap().0[..];
 
@@ -88,10 +83,6 @@ impl<'a> CertTest<'a> {
                     },
                 }
             }
-            Err(e) => CertTest {
-                hostname,
-                result: Err(e),
-            },
         }
     }
 }
