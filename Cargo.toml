@@ -1,7 +1,11 @@
 [package]
+categories = ["command-line-utilities"]
+description = "A Small SSL Certificate Checker"
+edition = "2021"
+keywords = ["certificate", "watchdog"]
+license = "MIT"
 name = "certo"
 version = "0.1.0"
-edition = "2021"
 
 [dependencies]
 clap = { version = "4.3.23", features = ["derive"] }
