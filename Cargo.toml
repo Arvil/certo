@@ -1,10 +1,12 @@
 [package]
 categories = ["command-line-utilities"]
-description = "A Small SSL Certificate Checker"
+description = "A Small SSL Certificate Watchdog"
 edition = "2021"
+homepage = "https://github.com/Arvil/certo"
 keywords = ["certificate", "watchdog"]
 license = "MIT"
 name = "certo"
+repository = "https://github.com/Arvil/certo"
 version = "0.1.0"
 
 [dependencies]
