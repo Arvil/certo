@@ -7,7 +7,7 @@ use crate::client_auth::ClientAuthenticationCredentials;
 
 #[allow(dead_code)] // will be used in later versions
 fn load_webpki_roots(store: &mut RootCertStore) {
-    store.add_server_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.0.iter().map(|ta| {
+    store.add_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.iter().map(|ta| {
         OwnedTrustAnchor::from_subject_spki_name_constraints(
             ta.subject,
             ta.spki,
@@ -70,7 +70,7 @@ pub fn safe_clientconfig(
 
     match client_auth {
         Some(creds) => wants_client_auth
-            .with_single_cert(creds.cert_chain, creds.key_der)
+            .with_client_auth_cert(creds.cert_chain, creds.key_der)
             .map_err(|e| crate::Error::InvalidCredentials { why: e.to_string() }),
         None => Ok(wants_client_auth.with_no_client_auth()),
     }
