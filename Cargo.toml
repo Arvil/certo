@@ -12,7 +12,7 @@ version = "0.1.1"
 [dependencies]
 clap = { version = "4.3.23", features = ["derive"] }
 env_logger = "0.10.0"
-log = "0.4.20"
+log = "0.4.21"
 rayon = "1.7.0"
 rustls = { version = "0.21.6" }
 rustls-native-certs = "0.6.3"
