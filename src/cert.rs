@@ -1,4 +1,5 @@
 use rustls::ClientConnection;
+use rustls_pki_types::CertificateDer;
 use std::{io::Write, net::TcpStream};
 
 use crate::error::{Error, Result};
@@ -6,7 +7,7 @@ use crate::error::{Error, Result};
 pub fn get_cert_chain<'a>(
     conn: &'a mut ClientConnection,
     hostname: &str,
-) -> Result<&'a [rustls::Certificate]> {
+) -> Result<&'a [CertificateDer<'a>]> {
     let mut sock = TcpStream::connect((hostname, 443)).map_err(|_| Error::ConnectionFailure)?;
     let mut tls = rustls::Stream::new(conn, &mut sock);
 

@@ -4,6 +4,7 @@ use clap::Parser;
 use error::{Error, Result};
 use log::{debug, error, info};
 use rayon::prelude::*;
+use rustls_pki_types::{pem::PemObject, CertificateDer};
 
 use crate::{cert_test::CertTest, cli::Args, client_auth::ClientAuthenticationCredentials};
 
@@ -32,11 +33,18 @@ fn main() -> Result<()> {
         }
     }
 
-    let client_auth = if args.client_keyfile.is_some() && !args.client_cert_chain.is_empty() {
-        Some(ClientAuthenticationCredentials::new(
-            &args.client_cert_chain,
-            &args.client_keyfile.unwrap(),
-        )?)
+    let cert_chain: Vec<CertificateDer<'static>> = args.client_cert_chain.iter()
+        .filter_map(|cert_path| {
+            match CertificateDer::from_pem_file(cert_path) {
+                Ok(cert) => Some(cert),
+                Err(_e) => None
+            }
+        })
+        .collect::<Vec<CertificateDer>>();
+    let client_auth: Option<ClientAuthenticationCredentials> = if args.client_keyfile.is_some() && !args.client_cert_chain.is_empty() {
+        Some(ClientAuthenticationCredentials{
+            cert_chain: cert_chain,
+            key_der: rustls_pki_types::PrivateKeyDer::from_pem_file(args.client_keyfile.as_ref().unwrap()).unwrap()})
     } else {
         None
     };

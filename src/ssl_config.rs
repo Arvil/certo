@@ -1,28 +1,29 @@
 use std::{fs::File, io::BufReader, path::PathBuf};
 
-use log::{error, info};
-use rustls::{ClientConfig, OwnedTrustAnchor, RootCertStore};
+use log::error;
+use rustls::{ClientConfig, RootCertStore};
+use rustls_pki_types::CertificateDer;
 
 use crate::client_auth::ClientAuthenticationCredentials;
 
+
 #[allow(dead_code)] // will be used in later versions
 fn load_webpki_roots(store: &mut RootCertStore) {
-    store.add_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.iter().map(|ta| {
-        OwnedTrustAnchor::from_subject_spki_name_constraints(
-            ta.subject,
-            ta.spki,
-            ta.name_constraints,
-        )
-    }))
+    for ta in webpki_roots::TLS_SERVER_ROOTS.iter() {
+        store.roots.push(rustls_pki_types::TrustAnchor{
+            subject: ta.subject.into(),
+            subject_public_key_info: ta.spki.into(),
+            name_constraints: ta.name_constraints.map(|nc| rustls_pki_types::Der::from(nc))
+    });
+    }
 }
 
 pub fn load_native_certs(store: &mut RootCertStore) -> crate::Result<()> {
-    let native_certs = rustls_native_certs::load_native_certs()
-        .map_err(|e| crate::Error::TLSInitializationFailure { why: e.to_string() })?;
+    let native_certs = rustls_native_certs::load_native_certs();
 
-    for cert in native_certs {
+    for cert in native_certs.certs {
         if let Err(crate::Error::InvalidCertificate { why }) = store
-            .add(&rustls::Certificate(cert.0))
+            .add(CertificateDer::from(cert))
             .map_err(|e| crate::Error::InvalidCertificate { why: e.to_string() })
         {
             error!(
@@ -39,17 +40,16 @@ pub fn load_pem_certs(store: &mut RootCertStore, certs: Vec<PathBuf>) {
         if let Ok(f) = File::open(ca_cert) {
             let mut f = BufReader::new(f);
 
-            match rustls_pemfile::certs(&mut f) {
-                Ok(contents) => {
-                    let (added, ignored) = &store.add_parsable_certificates(&contents);
-                    info!(
-                        "Added {} and ignored {} certificates from {}",
-                        added,
-                        ignored,
-                        ca_cert.to_string_lossy()
-                    );
+            for maybe_cert in rustls_pemfile::certs(&mut f) {
+                if let Ok(cert) = maybe_cert {
+                    if let Err(e) = store.add(cert) {
+                        error!("Failed to add certificate: {}", e);
+                    } else {
+                        error!("Failed to read certificate from {}", ca_cert.to_string_lossy());
+                    }
+                } else {
+                    error!("Failed to read certificate from {}", ca_cert.to_string_lossy());
                 }
-                Err(_) => error!("Failed to parse {}", ca_cert.to_string_lossy()),
             }
         } else {
             error!("Failed to read {}", ca_cert.to_string_lossy());
@@ -59,21 +59,21 @@ pub fn load_pem_certs(store: &mut RootCertStore, certs: Vec<PathBuf>) {
 
 pub fn safe_clientconfig(
     root_store: RootCertStore,
-    client_auth: Option<ClientAuthenticationCredentials>,
+    client_auth: Option<ClientAuthenticationCredentials<'static>>,
 ) -> crate::Result<ClientConfig> {
     let wants_client_auth = rustls::ClientConfig::builder()
-        .with_safe_default_cipher_suites()
-        .with_safe_default_kx_groups()
-        .with_safe_default_protocol_versions()
-        .map_err(|e| crate::Error::TLSInitializationFailure { why: e.to_string() })?
         .with_root_certificates(root_store);
 
-    match client_auth {
-        Some(creds) => wants_client_auth
-            .with_client_auth_cert(creds.cert_chain, creds.key_der)
-            .map_err(|e| crate::Error::InvalidCredentials { why: e.to_string() }),
+    let config = match client_auth {
+        Some(creds) => {
+            wants_client_auth
+                .with_client_auth_cert(creds.cert_chain, creds.key_der)
+                .map_err(|e| crate::Error::InvalidCertificate { why: e.to_string() })
+        }
         None => Ok(wants_client_auth.with_no_client_auth()),
-    }
+    };
+
+    config.map_err(move |e| crate::Error::InvalidCertificate { why: e.to_string() })
 }
 
 #[cfg(test)]

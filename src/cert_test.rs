@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
-use rustls::{ClientConfig, ServerName};
+use rustls::ClientConfig;
+use rustls::pki_types::ServerName;
 use serde::{ser::SerializeStruct, Serialize};
 use time::OffsetDateTime;
 use x509_parser::prelude::{FromDer, X509Certificate};
@@ -13,7 +14,7 @@ pub struct CertTest<'a> {
     pub result: Result<DaysToExpiration, Error>,
 }
 
-impl<'a> Serialize for CertTest<'a> {
+impl Serialize for CertTest<'_> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
@@ -40,8 +41,8 @@ impl<'a> CertTest<'a> {
         hostname: &'a str,
         days_to_expiration: i64,
         ssl_config: Arc<ClientConfig>,
-    ) -> CertTest {
-        let server_name: ServerName = hostname.try_into().unwrap();
+    ) -> CertTest<'a> {
+        let server_name: ServerName = hostname.to_string().try_into().unwrap();
         let mut conn = rustls::ClientConnection::new(ssl_config, server_name).unwrap();
 
         match cert::get_cert_chain(&mut conn, hostname) {
@@ -50,7 +51,7 @@ impl<'a> CertTest<'a> {
                 result: Err(e),
             },
             Ok(chain) => {
-                let leaf_der = &chain.first().unwrap().0[..];
+                let leaf_der = chain.first().unwrap().as_ref();
 
                 let certificate = {
                     if let Ok((_, leaf_cert)) = X509Certificate::from_der(leaf_der) {
