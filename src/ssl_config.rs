@@ -10,11 +10,7 @@ use crate::client_auth::ClientAuthenticationCredentials;
 #[allow(dead_code)] // will be used in later versions
 fn load_webpki_roots(store: &mut RootCertStore) {
     for ta in webpki_roots::TLS_SERVER_ROOTS.iter() {
-        store.roots.push(rustls_pki_types::TrustAnchor{
-            subject: ta.subject.into(),
-            subject_public_key_info: ta.spki.into(),
-            name_constraints: ta.name_constraints.map(|nc| rustls_pki_types::Der::from(nc))
-    });
+        store.roots.push(ta.clone());
     }
 }
 
