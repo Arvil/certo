@@ -7,7 +7,7 @@ keywords = ["certificate", "watchdog"]
 license = "MIT"
 name = "certo"
 repository = "https://github.com/Arvil/certo"
-version = "0.1.4"
+version = "0.1.5"
 
 [dependencies]
 clap = { version = "4.5.43", features = ["derive"] }
