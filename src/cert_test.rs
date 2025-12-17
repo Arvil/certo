@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use rustls::ClientConfig;
-use rustls::pki_types::ServerName;
 use serde::{ser::SerializeStruct, Serialize};
 use time::OffsetDateTime;
 use x509_parser::prelude::{FromDer, X509Certificate};
@@ -42,8 +41,26 @@ impl<'a> CertTest<'a> {
         days_to_expiration: i64,
         ssl_config: Arc<ClientConfig>,
     ) -> CertTest<'a> {
-        let server_name: ServerName = hostname.to_string().try_into().unwrap();
-        let mut conn = rustls::ClientConnection::new(ssl_config, server_name).unwrap();
+        let server_name = match hostname.to_string().try_into() {
+            Ok(sn) => sn,
+            Err(e) => return CertTest {
+                hostname,
+                result: Err(Error::InvalidHostname {
+                    hostname: hostname.to_string(),
+                    details: format!("{}", e)
+                }),
+            },
+        };
+
+        let mut conn = match rustls::ClientConnection::new(ssl_config, server_name) {
+            Ok(conn) => conn,
+            Err(e) => return CertTest {
+                hostname,
+                result: Err(Error::TLSInitializationFailure {
+                    why: format!("Failed to create TLS connection for '{}': {}", hostname, e)
+                }),
+            },
+        };
 
         match cert::get_cert_chain(&mut conn, hostname) {
             Err(e) => CertTest {
@@ -51,16 +68,23 @@ impl<'a> CertTest<'a> {
                 result: Err(e),
             },
             Ok(chain) => {
-                let leaf_der = chain.first().unwrap().as_ref();
+                let leaf_der = match chain.first() {
+                    Some(cert) => cert.as_ref(),
+                    None => return CertTest {
+                        hostname,
+                        result: Err(Error::NoCertificate),
+                    },
+                };
 
-                let certificate = {
-                    if let Ok((_, leaf_cert)) = X509Certificate::from_der(leaf_der) {
-                        Some(leaf_cert)
-                    } else {
-                        None
-                    }
-                }
-                .unwrap();
+                let certificate = match X509Certificate::from_der(leaf_der) {
+                    Ok((_, leaf_cert)) => leaf_cert,
+                    Err(e) => return CertTest {
+                        hostname,
+                        result: Err(Error::InvalidCertificate {
+                            why: format!("Failed to parse certificate: {}", e)
+                        }),
+                    },
+                };
 
                 let not_after = &certificate
                     .tbs_certificate

@@ -36,15 +36,27 @@ fn main() -> Result<()> {
     let cert_chain: Vec<CertificateDer<'static>> = args.client_cert_chain.iter()
         .filter_map(|cert_path| {
             match CertificateDer::from_pem_file(cert_path) {
-                Ok(cert) => Some(cert),
-                Err(_e) => None
+                Ok(cert) => {
+                    debug!("Successfully loaded client certificate from: {}", cert_path.display());
+                    Some(cert)
+                },
+                Err(e) => {
+                    error!("Failed to load client certificate from {}: {}", cert_path.display(), e);
+                    None
+                }
             }
         })
         .collect::<Vec<CertificateDer>>();
     let client_auth: Option<ClientAuthenticationCredentials> = if args.client_keyfile.is_some() && !args.client_cert_chain.is_empty() {
-        Some(ClientAuthenticationCredentials{
-            cert_chain: cert_chain,
-            key_der: rustls_pki_types::PrivateKeyDer::from_pem_file(args.client_keyfile.as_ref().unwrap()).unwrap()})
+        if let Some(keyfile) = &args.client_keyfile {
+            let key_der = rustls_pki_types::PrivateKeyDer::from_pem_file(keyfile)
+                .map_err(|e| Error::InvalidPrivateKey { why: format!("{:#}", e) })?;
+            Some(ClientAuthenticationCredentials{
+                cert_chain: cert_chain,
+                key_der: key_der})
+        } else {
+            None
+        }
     } else {
         None
     };
@@ -58,7 +70,13 @@ fn main() -> Result<()> {
         .collect();
 
     if args.json {
-        println!("{}", serde_json::to_string_pretty(&tests).unwrap());
+        match serde_json::to_string_pretty(&tests) {
+            Ok(json) => println!("{}", json),
+            Err(e) => {
+                error!("Failed to serialize results to JSON: {}", e);
+                return Err(Error::JsonSerializationFailure { why: format!("{}", e) });
+            }
+        }
     } else {
         tests.iter().for_each(|t| match &t.result {
             Ok(remaining_days) => {

@@ -87,7 +87,8 @@ mod tests {
     #[test]
     fn test_load_native_certs() {
         let mut store = RootCertStore::empty();
-        load_native_certs(&mut store).unwrap();
+        // This test should fail if native certs cannot be loaded
+        load_native_certs(&mut store).expect("Failed to load native certificates");
         assert_ne!(store.roots.len(), 0);
     }
 

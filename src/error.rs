@@ -5,7 +5,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 #[allow(dead_code)]
 #[derive(Error, Debug)]
 pub enum Error {
-    #[error("Falied to initialise TLS context: {why}")]
+    #[error("Failed to initialize TLS context: {why}")]
     TLSInitializationFailure { why: String },
 
     #[error("Invalid Certificate: {why}.")]
@@ -26,9 +26,15 @@ pub enum Error {
     #[error("No certificate was found.")]
     NoCertificate,
 
-    #[error("Could not connect to host.")]
-    ConnectionFailure,
+    #[error("Could not connect to host {hostname}: {details}")]
+    ConnectionFailure { hostname: String, details: String },
 
     #[error("Some ({0}) tests failed")]
     CertoTestFailure(usize),
+
+    #[error("Invalid hostname: {hostname} - {details}")]
+    InvalidHostname { hostname: String, details: String },
+
+    #[error("JSON serialization failed: {why}")]
+    JsonSerializationFailure { why: String },
 }
