@@ -1,11 +1,12 @@
+// This file is part of the `certo` project.
+
 use thiserror::Error;
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-#[allow(dead_code)]
 #[derive(Error, Debug)]
 pub enum Error {
-    #[error("Falied to initialise TLS context: {why}")]
+    #[error("Failed to initialise TLS context: {why}")]
     TLSInitializationFailure { why: String },
 
     #[error("Invalid Certificate: {why}.")]
@@ -23,11 +24,28 @@ pub enum Error {
         max_days_to_expiration: i64,
     },
 
-    #[error("No certificate was found.")]
+    #[error("No certificate was presented by the server.")]
     NoCertificate,
 
-    #[error("Could not connect to host.")]
-    ConnectionFailure,
+    #[error("Could not connect to {hostname}:{port}: {why}")]
+    ConnectionFailure {
+        hostname: String,
+        port: u16,
+        why: String,
+    },
+
+    #[error("TLS handshake with {hostname}:{port} did not complete within {seconds} seconds")]
+    HandshakeTimeout {
+        hostname: String,
+        port: u16,
+        seconds: u64,
+    },
+
+    #[error("Invalid hostname: {hostname} ({why})")]
+    InvalidHostname { hostname: String, why: String },
+
+    #[error("Failed to load certificates from {path}: {why}")]
+    CertificateLoadFailure { path: String, why: String },
 
     #[error("Some ({0}) tests failed")]
     CertoTestFailure(usize),

@@ -1,86 +1,111 @@
+// This file is part of the `certo` project.
+
 use std::{fs::File, io::BufReader, path::PathBuf};
 
-use log::error;
+use log::{debug, error, warn};
 use rustls::{ClientConfig, RootCertStore};
-use rustls_pki_types::CertificateDer;
 
-use crate::client_auth::ClientAuthenticationCredentials;
+use crate::{
+    client_auth::ClientAuthenticationCredentials,
+    error::{Error, Result},
+};
 
+/// Populate `store` with the operating system's root certificates.
+///
+/// Unparsable certificates are logged and skipped.
+pub fn load_native_certs(store: &mut RootCertStore) -> Result<()> {
+    let native_certs = rustls_native_certs::load_native_certs();
 
-#[allow(dead_code)] // will be used in later versions
-fn load_webpki_roots(store: &mut RootCertStore) {
+    let mut added = 0;
+    for cert in native_certs.certs {
+        match store.add(cert) {
+            Ok(()) => added += 1,
+            Err(e) => error!("Ignoring unparsable certificate from the system store: {e}"),
+        }
+    }
+    if added == 0 {
+        warn!("No usable certificates were found in the system root store");
+    }
+    Ok(())
+}
+
+/// Populate `store` with the bundled Mozilla root certificate set.
+pub fn load_webpki_roots(store: &mut RootCertStore) {
     for ta in webpki_roots::TLS_SERVER_ROOTS.iter() {
         store.roots.push(ta.clone());
     }
 }
 
-pub fn load_native_certs(store: &mut RootCertStore) -> crate::Result<()> {
-    let native_certs = rustls_native_certs::load_native_certs();
+/// Load PEM certificates from `paths` into `store`, returning the number of
+/// certificates added.
+///
+/// A path that cannot be read, or that yields no certificates at all, is a
+/// hard error: explicitly named trust anchors must not fail silently.
+/// Unparsable entries inside an otherwise valid file are logged and skipped.
+pub fn load_pem_certs(store: &mut RootCertStore, paths: &[PathBuf]) -> Result<usize> {
+    let mut total = 0;
+    for path in paths {
+        let file = File::open(path).map_err(|e| Error::CertificateLoadFailure {
+            path: path.display().to_string(),
+            why: format!("cannot open file: {e}"),
+        })?;
+        let mut reader = BufReader::new(file);
 
-    for cert in native_certs.certs {
-        if let Err(crate::Error::InvalidCertificate { why }) = store
-            .add(CertificateDer::from(cert))
-            .map_err(|e| crate::Error::InvalidCertificate { why: e.to_string() })
-        {
-            error!(
-                "Failed to add certificate from native certificate store: {}",
-                why
-            );
-        }
-    }
-    Ok(())
-}
-
-pub fn load_pem_certs(store: &mut RootCertStore, certs: Vec<PathBuf>) {
-    for ca_cert in certs.iter() {
-        if let Ok(f) = File::open(ca_cert) {
-            let mut f = BufReader::new(f);
-
-            for maybe_cert in rustls_pemfile::certs(&mut f) {
-                if let Ok(cert) = maybe_cert {
-                    if let Err(e) = store.add(cert) {
-                        error!("Failed to add certificate: {}", e);
-                    } else {
-                        error!("Failed to read certificate from {}", ca_cert.to_string_lossy());
-                    }
-                } else {
-                    error!("Failed to read certificate from {}", ca_cert.to_string_lossy());
-                }
+        let mut added = 0;
+        for maybe_cert in rustls_pemfile::certs(&mut reader) {
+            match maybe_cert {
+                Ok(cert) => match store.add(cert) {
+                    Ok(()) => added += 1,
+                    Err(e) => error!("Ignoring unparsable certificate in {}: {e}", path.display()),
+                },
+                Err(e) => error!("Ignoring unparsable PEM entry in {}: {e}", path.display()),
             }
-        } else {
-            error!("Failed to read {}", ca_cert.to_string_lossy());
         }
+
+        if added == 0 {
+            return Err(Error::CertificateLoadFailure {
+                path: path.display().to_string(),
+                why: "no certificates found in file".to_string(),
+            });
+        }
+        debug!("Loaded {added} certificate(s) from {}", path.display());
+        total += added;
     }
+    Ok(total)
 }
 
+/// Build a [`ClientConfig`] from `root_store`, optionally with client
+/// authentication credentials.
 pub fn safe_clientconfig(
     root_store: RootCertStore,
     client_auth: Option<ClientAuthenticationCredentials<'static>>,
-) -> crate::Result<ClientConfig> {
-    let wants_client_auth = rustls::ClientConfig::builder()
-        .with_root_certificates(root_store);
+) -> Result<ClientConfig> {
+    let builder = rustls::ClientConfig::builder().with_root_certificates(root_store);
 
     let config = match client_auth {
-        Some(creds) => {
-            wants_client_auth
-                .with_client_auth_cert(creds.cert_chain, creds.key_der)
-                .map_err(|e| crate::Error::InvalidCertificate { why: e.to_string() })
-        }
-        None => Ok(wants_client_auth.with_no_client_auth()),
+        Some(creds) => builder.with_client_auth_cert(creds.cert_chain, creds.key_der),
+        None => Ok(builder.with_no_client_auth()),
     };
 
-    config.map_err(move |e| crate::Error::InvalidCertificate { why: e.to_string() })
+    config.map_err(|e| Error::TLSInitializationFailure { why: e.to_string() })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    fn paths(names: &[&str]) -> Vec<PathBuf> {
+        names
+            .iter()
+            .map(|n| PathBuf::from("tests/certs").join(n))
+            .collect()
+    }
+
     #[test]
     fn test_load_pem_certs() {
         let mut store = RootCertStore::empty();
-        let certs = vec![PathBuf::from("tests/certs/isrgrootx1.pem")];
-        load_pem_certs(&mut store, certs);
+        let added = load_pem_certs(&mut store, &paths(&["isrgrootx1.pem"])).unwrap();
+        assert_eq!(added, 1);
         assert_eq!(store.roots.len(), 1);
     }
 
@@ -94,32 +119,61 @@ mod tests {
     #[test]
     fn test_load_pem_certs_non_existent_file() {
         let mut store = RootCertStore::empty();
-        let certs = vec![PathBuf::from("tests/certs/ca.cert.pem.non_existent")];
-        load_pem_certs(&mut store, certs);
-        assert_eq!(store.roots.len(), 0);
+        let err = load_pem_certs(&mut store, &paths(&["ca.cert.pem.non_existent"])).unwrap_err();
+        assert!(
+            err.to_string().contains("cannot open file"),
+            "unexpected error: {err}"
+        );
     }
 
     #[test]
     fn test_load_pem_certs_multiple_certs() {
         let mut store = RootCertStore::empty();
-        let certs = vec![
-            PathBuf::from("tests/certs/isrgrootx1.pem"),
-            PathBuf::from("tests/certs/lets-encrypt-r3.pem"),
-            PathBuf::from("tests/certs/expired-isrgrootx1-letsencrypt-org.pem"),
-        ];
-        load_pem_certs(&mut store, certs);
+        let added = load_pem_certs(
+            &mut store,
+            &paths(&[
+                "isrgrootx1.pem",
+                "lets-encrypt-r3.pem",
+                "expired-isrgrootx1-letsencrypt-org.pem",
+            ]),
+        )
+        .unwrap();
+        assert_eq!(added, 3);
         assert_eq!(store.roots.len(), 3);
     }
 
     #[test]
     fn test_load_pem_certs_invalid_cert_multiple_certs() {
+        // A file with no certificates at all is a hard error, even when other
+        // files in the same invocation were fine.
         let mut store = RootCertStore::empty();
-        let certs = vec![
-            PathBuf::from("tests/certs/isrgrootx1.pem"),
-            PathBuf::from("tests/certs/lets-encrypt-r3.pem"),
-            PathBuf::from("tests/certs/invalid.cert.pem"),
-        ];
-        load_pem_certs(&mut store, certs);
+        let err = load_pem_certs(
+            &mut store,
+            &paths(&["isrgrootx1.pem", "lets-encrypt-r3.pem", "invalid.cert.pem"]),
+        )
+        .unwrap_err();
+        assert!(
+            err.to_string().contains("no certificates found in file"),
+            "unexpected error: {err}"
+        );
+        // The valid files were still loaded before the failure.
         assert_eq!(store.roots.len(), 2);
+    }
+
+    #[test]
+    fn test_load_pem_certs_empty_file() {
+        let mut store = RootCertStore::empty();
+        let err = load_pem_certs(&mut store, &paths(&["empty.pem"])).unwrap_err();
+        assert!(
+            err.to_string().contains("no certificates found in file"),
+            "unexpected error: {err}"
+        );
+    }
+
+    #[test]
+    fn test_load_webpki_roots() {
+        let mut store = RootCertStore::empty();
+        load_webpki_roots(&mut store);
+        assert_ne!(store.roots.len(), 0);
     }
 }
