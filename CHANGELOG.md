@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-09-07
+
 ### Fixed
 
 - `certo` no longer panics (exit 101) on malformed input: invalid hostnames,
@@ -48,6 +50,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- TLS crypto provider switched from aws-lc-rs to ring: builds no longer
+  require cmake/Perl/NASM, shrinking the dependency tree by nine crates.
+  Post-quantum hybrid key exchange (aws-lc-rs-only) is dropped; environments
+  requiring FIPS-validated primitives can build with the `aws_lc_rs`
+  feature instead.
 - Declared MSRV: 1.88 (`rust-version` in `Cargo.toml`).
 - Dependency floors raised to currently tested versions; unmaintained
   `rustls-pemfile` replaced by the `rustls-pki-types` PEM API

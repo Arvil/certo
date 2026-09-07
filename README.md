@@ -148,7 +148,10 @@ SBOMs locally.
 
 ## Development
 
-The minimum supported Rust version is 1.88.
+The minimum supported Rust version is 1.88.  TLS cryptography is provided by
+`ring` via rustls, so building needs only a C compiler — no cmake, Perl or
+NASM (environments requiring FIPS-validated primitives can build rustls with
+its `aws_lc_rs` feature instead).
 
 ```shell
 cargo build                 # build

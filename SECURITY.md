@@ -60,6 +60,9 @@ sha256sum --check SHA256SUMS
   patch updates are grouped to keep pull requests reviewable.
 * The minimum supported Rust version (MSRV) is declared as
   `rust-version = 1.88` in `Cargo.toml`.
+* TLS cryptography uses the `ring` provider via rustls (chosen for minimal
+  build dependencies; see the CHANGELOG for the trade-off and the
+  FIPS-oriented alternative).
 * Release binaries are built with LTO and stripped (`[profile.release]`).
 
 ## CI hardening
