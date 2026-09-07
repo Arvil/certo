@@ -91,15 +91,62 @@ jobs:
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/master'
     needs: [lint, test, audit]
-    # The only job that writes: it creates the GitHub Release.
+    # Creates the GitHub release when Cargo.toml's version has no release yet.
+    permissions:
+      contents: write
+    outputs:
+      created: ${{ steps.release.outputs.created }}
+      tag: ${{ steps.release.outputs.tag }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Create the release when the version changes
+        id: release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Read the version from cargo itself rather than grepping Cargo.toml:
+          # text matching trips over keys such as `rust-version`.
+          VERSION=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "certo") | .version')
+          TAG="v${VERSION}"
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            echo "Release ${TAG} already exists - skipping"
+            echo "created=false" >> "$GITHUB_OUTPUT"
+          else
+            gh release create "$TAG" --target "$GITHUB_SHA" --title "$TAG" --generate-notes
+            echo "created=true" >> "$GITHUB_OUTPUT"
+            echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          fi
+
+  attach:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: release
+    if: needs.release.outputs.created == 'true'
+    # Builds the release binary and attaches it with the SBOM and checksums.
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: manoadamro/rust-release@028b5d008bac5437257ec3ec905b12aed11e766a # v1
-        with:
-          owner: ${{ github.repository_owner }}
-          repo: ${{ github.repository }}
-          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - name: Install SBOM tooling
+        run: cargo install cargo-auditable cargo-cyclonedx --locked
+      - name: Build release binary with embedded dependency manifest
+        run: cargo auditable build --release
+      - name: Generate CycloneDX SBOM
+        run: cargo cyclonedx -f json --spec-version 1.5
+      - name: Collect artifacts
+        run: |
+          VERSION=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "certo") | .version')
+          mkdir -p dist
+          cp target/release/certo "dist/certo-${VERSION}-x86_64-linux"
+          cp certo.cdx.json "dist/certo-${VERSION}.cdx.json"
+          (cd dist && sha256sum -- * > SHA256SUMS)
+      - name: Upload artifacts to the release
+        run: gh release upload "$TAG" dist/* --clobber
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.release.outputs.tag }}

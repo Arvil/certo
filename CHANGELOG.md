@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Release automation reads the version via `cargo metadata` instead of
+  grepping `Cargo.toml` (a naive match can pick up keys such as
+  `rust-version`), and creates the GitHub release and its artifacts in a
+  single workflow; the `manoadamro/rust-release` action is no longer used.
+
 ## [0.2.0] - 2026-09-07
 
 ### Fixed
