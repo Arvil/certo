@@ -61,3 +61,23 @@ sha256sum --check SHA256SUMS
 * The minimum supported Rust version (MSRV) is declared as
   `rust-version = 1.88` in `Cargo.toml`.
 * Release binaries are built with LTO and stripped (`[profile.release]`).
+
+## CI hardening
+
+The workflows in `.github/workflows/` follow GitHub's security hardening
+practices for the automatic `GITHUB_TOKEN`:
+
+* **Least privilege** — the token is read-only (`contents: read`) for every
+  job; only the release jobs that create or upload to GitHub Releases get
+  `contents: write`.
+* **No persisted credentials** — checkouts use `persist-credentials: false`,
+  so the token is not stored in the runner's git configuration where
+  build scripts or test code could read it.
+* **Pinned actions** — every action is pinned to an immutable commit SHA
+  (with the version in a comment) instead of a mutable tag, and Dependabot
+  keeps those pins updated.
+* **No `pull_request_target`** — pull request jobs run with a read-only
+  token only, so contributor code executed during `cargo test` cannot
+  modify the repository or its settings.
+* The repository does not use custom CI secrets; the only credential
+  involved is the workflow-scoped `GITHUB_TOKEN` GitHub injects per run.
