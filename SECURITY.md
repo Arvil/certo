@@ -70,6 +70,11 @@ practices for the automatic `GITHUB_TOKEN`:
 * **Least privilege** — the token is read-only (`contents: read`) for every
   job; only the release jobs that create or upload to GitHub Releases get
   `contents: write`.
+* **Read-only repository default** — the repository's *Workflow permissions*
+  setting is also set to "Read repository contents and packages permissions",
+  so even a workflow that forgets to declare a `permissions:` block gets a
+  read-only token.  Explicit blocks in the workflows override this default;
+  a new workflow that needs write access must declare it.
 * **No persisted credentials** — checkouts use `persist-credentials: false`,
   so the token is not stored in the runner's git configuration where
   build scripts or test code could read it.
