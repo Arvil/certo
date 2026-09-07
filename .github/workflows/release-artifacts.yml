@@ -1,0 +1,42 @@
+name: Release artifacts
+
+# Attached to GitHub releases created by manoadamro/rust-release (which runs
+# on merges to master when the Cargo.toml version changed).  Builds the
+# release binary with an embedded dependency manifest (cargo-auditable),
+# generates a CycloneDX SBOM and uploads both, plus checksums, to the release.
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  attach:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: Swatinem/rust-cache@v2
+      - name: Install SBOM tooling
+        run: cargo install cargo-auditable cargo-cyclonedx --locked
+      - name: Build release binary with embedded dependency manifest
+        run: cargo auditable build --release
+      - name: Generate CycloneDX SBOM
+        run: cargo cyclonedx -f json --spec-version 1.5
+      - name: Collect artifacts
+        run: |
+          VERSION=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "certo") | .version')
+          mkdir -p dist
+          cp target/release/certo "dist/certo-${VERSION}-x86_64-linux"
+          cp certo.cdx.json "dist/certo-${VERSION}.cdx.json"
+          (cd dist && sha256sum -- * > SHA256SUMS)
+      - name: Upload artifacts to the release
+        run: gh release upload "$TAG" dist/* --clobber
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.event.release.tag_name }}
