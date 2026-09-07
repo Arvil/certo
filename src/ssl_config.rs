@@ -4,6 +4,7 @@ use std::{fs::File, io::BufReader, path::PathBuf};
 
 use log::{debug, error, warn};
 use rustls::{ClientConfig, RootCertStore};
+use rustls_pki_types::{pem::PemObject, CertificateDer};
 
 use crate::{
     client_auth::ClientAuthenticationCredentials,
@@ -49,10 +50,10 @@ pub fn load_pem_certs(store: &mut RootCertStore, paths: &[PathBuf]) -> Result<us
             path: path.display().to_string(),
             why: format!("cannot open file: {e}"),
         })?;
-        let mut reader = BufReader::new(file);
+        let reader = BufReader::new(file);
 
         let mut added = 0;
-        for maybe_cert in rustls_pemfile::certs(&mut reader) {
+        for maybe_cert in CertificateDer::pem_reader_iter(reader) {
             match maybe_cert {
                 Ok(cert) => match store.add(cert) {
                     Ok(()) => added += 1,
