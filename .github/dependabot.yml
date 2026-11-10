@@ -1,6 +1,7 @@
 # Dependabot configuration for certo.
 #
-# Cargo dependencies and GitHub Actions are both updated weekly.  Minor and
+# Cargo dependencies, the devcontainer image and GitHub Actions are all updated
+# weekly.  Minor and
 # patch updates of the same ecosystem are grouped into a single PR so the
 # queue stays reviewable; major bumps (rare for the 0.x crates we track) and
 # security updates always get their own PR.
@@ -17,6 +18,12 @@ updates:
         update-types:
           - "minor"
           - "patch"
+
+  - package-ecosystem: "devcontainers"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
 
   - package-ecosystem: "github-actions"
     directory: "/"

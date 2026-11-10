@@ -153,13 +153,25 @@ The minimum supported Rust version is 1.88.  TLS cryptography is provided by
 NASM (environments requiring FIPS-validated primitives can build rustls with
 its `aws_lc_rs` feature instead).
 
+The toolchain is defined by the [devcontainer](.devcontainer/devcontainer.json),
+which CI uses too, so no local Rust installation is needed.  Open the repository
+in VS Code ("Reopen in Container") or from the command line:
+
+```shell
+devcontainer up --workspace-folder .
+devcontainer exec --workspace-folder . bash
+```
+
+Inside the container (dev tools are installed at pinned versions by
+`.devcontainer/install-tools.sh`):
+
 ```shell
 cargo build                 # build
 cargo test                  # unit + end-to-end tests (no network required)
 cargo clippy --all-targets  # lint
 cargo fmt --check           # formatting
-cargo audit                 # RustSec advisories (cargo install cargo-audit)
-cargo cyclonedx -f json     # SBOM (cargo install cargo-cyclonedx)
+cargo audit                 # RustSec advisories
+cargo cyclonedx -f json     # SBOM
 ```
 
 The end-to-end tests (`tests/end_to_end.rs`) run a real TLS server in-process
