@@ -1,0 +1,17 @@
+{
+  "name": "certo",
+  "image": "mcr.microsoft.com/devcontainers/rust:2-1-bookworm",
+  // Dev tools (cargo-audit, cargo-cyclonedx, cargo-auditable) are installed at
+  // pinned versions by a script shared with CI, so local and CI always agree.
+  "postCreateCommand": ".devcontainer/install-tools.sh",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "rust-lang.rust-analyzer",
+        "tamasfe.even-better-toml",
+        "vadimcn.vscode-lldb",
+        "fill-labs.dependi"
+      ]
+    }
+  }
+}

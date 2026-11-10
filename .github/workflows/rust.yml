@@ -20,16 +20,19 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
+      # All build/test jobs run inside the repository's devcontainer
+      # (.devcontainer/), so CI uses exactly the toolchain developers use.
       # persist-credentials: false keeps the token out of the checkout's git
       # config; these jobs never push.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
-      - name: Formatting
-        run: cargo fmt --check
-      - name: Clippy
-        run: cargo clippy --all-targets -- -D warnings
+      - uses: devcontainers/ci@513af61f4de4f75d37e4438f184ba4358f0fc1ca # v0.3.1900000450
+        with:
+          push: never
+          runCmd: |
+            cargo fmt --check
+            cargo clippy --all-targets -- -D warnings
 
   test:
     runs-on: ubuntu-latest
@@ -41,27 +44,45 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
-      - name: Tests
-        run: cargo test --all-targets
+      - uses: devcontainers/ci@513af61f4de4f75d37e4438f184ba4358f0fc1ca # v0.3.1900000450
+        with:
+          push: never
+          runCmd: |
+            cargo test --all-targets
+
+  msrv:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      # Guards the `rust-version` declared in Cargo.toml.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: devcontainers/ci@513af61f4de4f75d37e4438f184ba4358f0fc1ca # v0.3.1900000450
+        with:
+          push: never
+          runCmd: |
+            rustup toolchain install 1.88 --profile minimal
+            cargo +1.88 build --locked
 
   audit:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
       # Run cargo-audit directly rather than via rustsec/audit-check: that
       # action publishes a check run through the Checks API, which fails with
       # "Resource not accessible by integration" when the token is read-only
       # (always the case for Dependabot and fork PRs).  The step still fails
       # the job when a vulnerability is found, and prints the advisories.
-      - name: Security audit (RustSec advisories)
-        run: |
-          cargo install cargo-audit --locked
-          cargo audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: devcontainers/ci@513af61f4de4f75d37e4438f184ba4358f0fc1ca # v0.3.1900000450
+        with:
+          push: never
+          runCmd: |
+            .devcontainer/install-tools.sh cargo-audit
+            cargo audit
 
   sbom:
     runs-on: ubuntu-latest
@@ -70,11 +91,12 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
-      - name: Generate CycloneDX SBOM
-        run: |
-          cargo install cargo-cyclonedx --locked
-          cargo cyclonedx -f json --spec-version 1.5
+      - uses: devcontainers/ci@513af61f4de4f75d37e4438f184ba4358f0fc1ca # v0.3.1900000450
+        with:
+          push: never
+          runCmd: |
+            .devcontainer/install-tools.sh cargo-cyclonedx
+            cargo cyclonedx -f json --spec-version 1.5
       - name: Upload SBOM artifact
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -89,14 +111,16 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
-      - name: Build
-        run: cargo build --verbose
+      - uses: devcontainers/ci@513af61f4de4f75d37e4438f184ba4358f0fc1ca # v0.3.1900000450
+        with:
+          push: never
+          runCmd: |
+            cargo build --verbose --locked
 
   release:
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/master'
-    needs: [lint, test, audit]
+    needs: [lint, test, msrv, audit]
     # Creates the GitHub release when Cargo.toml's version has no release yet.
     permissions:
       contents: write
