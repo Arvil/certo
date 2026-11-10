@@ -52,10 +52,16 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      # Run cargo-audit directly rather than via rustsec/audit-check: that
+      # action publishes a check run through the Checks API, which fails with
+      # "Resource not accessible by integration" when the token is read-only
+      # (always the case for Dependabot and fork PRs).  The step still fails
+      # the job when a vulnerability is found, and prints the advisories.
       - name: Security audit (RustSec advisories)
-        uses: rustsec/audit-check@69366f33c96575abad1ee0dba8212993eecbe998 # v2.0.0
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cargo install cargo-audit --locked
+          cargo audit
 
   sbom:
     runs-on: ubuntu-latest
